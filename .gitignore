@@ -1,3 +1,7 @@
+node_modules/
 .env
-gameplan.txt
-schema.txt
+*.pyc
+*.pyo
+*.log
+/build
+/dist

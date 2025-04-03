@@ -1,0 +1,407 @@
+schema for db (open to change/ ideas)
+
+Database Schema Guidelines
+
+Normalization Principles Applied
+This schema follows database normalization principles:
+
+First Normal Form (1NF)
+All tables have primary keys
+All columns contain atomic values
+No repeating groups
+
+Second Normal Form (2NF)
+All tables are in 1NF
+All non-key attributes are fully dependent on the primary key
+Junction tables used for many-to-many relationships (e.g., transaction_categories, budget_categories)
+
+Third Normal Form (3NF)
+All tables are in 2NF
+No transitive dependencies (non-key attributes depend only on the primary key)
+Separate tables for categories, tags, etc.
+
+Boyce-Codd Normal Form (BCNF)
+All tables are in 3NF
+For any dependency A → B, A is a superkey
+
+Key Design Decisions
+
+Historical Data Storage:
+Separate tables for historical data (account_balances, asset_prices)
+Timestamps on all critical tables for proper versioning
+
+Flexible Categorization:
+Hierarchical categories with parent-child relationships
+Support for both system and user-defined categories
+Transaction splitting across multiple categories
+
+Financial Institution Integration:
+Tables for managing Plaid API tokens and integration status
+Support for both automated and manual accounts
+
+Budget Management:
+Budget periods of various types (monthly, weekly, etc.)
+Category-level budget allocation
+
+Investment Tracking:
+Asset holdings with historical price data
+Support for various investment types
+
+Security & Audit:
+Comprehensive audit logging
+No storage of sensitive credentials (only tokens)
+
+Performance Considerations
+
+Indexing Strategy:
+Indexes on frequently queried columns
+Composite indexes for common query patterns
+
+
+Data Partitioning:
+Transaction table could be partitioned by date for larger datasets
+
+Constraints:
+Proper foreign key constraints for referential integrity
+Unique constraints to prevent duplicate data
+
+
+-- Users table
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    date_created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    preferred_currency CHAR(3) DEFAULT 'USD'
+);
+
+-- Financial Institutions table
+CREATE TABLE financial_institutions (
+    institution_id SERIAL PRIMARY KEY,
+    plaid_institution_id VARCHAR(100) UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    logo_url VARCHAR(255),
+    institution_type VARCHAR(50),
+    website_url VARCHAR(255)
+);
+
+-- Accounts table
+CREATE TABLE accounts (
+    account_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    institution_id INTEGER REFERENCES financial_institutions(institution_id),
+    plaid_account_id VARCHAR(100) UNIQUE,
+    account_name VARCHAR(255) NOT NULL,
+    account_type VARCHAR(50) NOT NULL,
+    account_subtype VARCHAR(50),
+    is_manual BOOLEAN NOT NULL DEFAULT FALSE,
+    account_number_last4 VARCHAR(4),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_user_account UNIQUE (user_id, account_name)
+);
+
+-- Account Balances table (historical record of balances)
+CREATE TABLE account_balances (
+    balance_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    balance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    current_balance DECIMAL(19, 4) NOT NULL,
+    available_balance DECIMAL(19, 4),
+    limit_amount DECIMAL(19, 4),
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    CONSTRAINT uk_account_balance_date UNIQUE (account_id, balance_date)
+);
+
+-- Categories table (transaction categories)
+CREATE TABLE categories (
+    category_id SERIAL PRIMARY KEY,
+    parent_category_id INTEGER REFERENCES categories(category_id),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_system BOOLEAN NOT NULL DEFAULT TRUE,
+    is_income BOOLEAN NOT NULL DEFAULT FALSE,
+    color_hex VARCHAR(7)
+);
+
+-- User Categories table (user-defined custom categories)
+CREATE TABLE user_categories (
+    user_category_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(category_id) ON DELETE CASCADE,
+    custom_name VARCHAR(100),
+    custom_color_hex VARCHAR(7),
+    CONSTRAINT uk_user_category UNIQUE (user_id, category_id)
+);
+
+-- Transactions table
+CREATE TABLE transactions (
+    transaction_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    plaid_transaction_id VARCHAR(100) UNIQUE,
+    transaction_date DATE NOT NULL,
+    post_date DATE,
+    merchant_name VARCHAR(255),
+    amount DECIMAL(19, 4) NOT NULL,
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    transaction_type VARCHAR(50),
+    is_pending BOOLEAN NOT NULL DEFAULT FALSE,
+    description TEXT,
+    original_description TEXT,
+    is_manual BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Transaction Categories junction table
+CREATE TABLE transaction_categories (
+    transaction_category_id SERIAL PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(transaction_id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(category_id),
+    amount DECIMAL(19, 4) NOT NULL,
+    is_user_categorized BOOLEAN NOT NULL DEFAULT FALSE,
+    confidence_score DECIMAL(5, 2),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_transaction_category UNIQUE (transaction_id, category_id)
+);
+
+-- Transaction Tags table
+CREATE TABLE tags (
+    tag_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    CONSTRAINT uk_user_tag_name UNIQUE (user_id, name)
+);
+
+-- Transaction Tags junction table
+CREATE TABLE transaction_tags (
+    transaction_tag_id SERIAL PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(transaction_id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
+    CONSTRAINT uk_transaction_tag UNIQUE (transaction_id, tag_id)
+);
+
+-- Budgets table
+CREATE TABLE budgets (
+    budget_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    amount DECIMAL(19, 4) NOT NULL,
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    period_type VARCHAR(20) NOT NULL, -- monthly, weekly, yearly, custom
+    start_date DATE NOT NULL,
+    end_date DATE,
+    is_recurring BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_user_budget_name_period UNIQUE (user_id, name, period_type, start_date)
+);
+
+-- Budget Categories junction table
+CREATE TABLE budget_categories (
+    budget_category_id SERIAL PRIMARY KEY,
+    budget_id INTEGER NOT NULL REFERENCES budgets(budget_id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(category_id),
+    amount DECIMAL(19, 4) NOT NULL,
+    CONSTRAINT uk_budget_category UNIQUE (budget_id, category_id)
+);
+
+-- Bills table
+CREATE TABLE bills (
+    bill_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    amount DECIMAL(19, 4) NOT NULL,
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    due_day INTEGER,
+    first_due_date DATE,
+    frequency VARCHAR(50) NOT NULL, -- monthly, weekly, biweekly, etc.
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    estimated BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_pay BOOLEAN NOT NULL DEFAULT FALSE,
+    website_url VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_user_bill_name UNIQUE (user_id, name)
+);
+
+-- Bill Payments table
+CREATE TABLE bill_payments (
+    payment_id SERIAL PRIMARY KEY,
+    bill_id INTEGER NOT NULL REFERENCES bills(bill_id) ON DELETE CASCADE,
+    transaction_id INTEGER REFERENCES transactions(transaction_id),
+    due_date DATE NOT NULL,
+    amount DECIMAL(19, 4) NOT NULL,
+    is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+    payment_date DATE,
+    payment_method VARCHAR(100),
+    confirmation_number VARCHAR(100),
+    notes TEXT,
+    CONSTRAINT uk_bill_due_date UNIQUE (bill_id, due_date)
+);
+
+-- Goals table
+CREATE TABLE goals (
+    goal_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    target_amount DECIMAL(19, 4) NOT NULL,
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    current_amount DECIMAL(19, 4) NOT NULL DEFAULT 0,
+    start_date DATE NOT NULL,
+    target_date DATE,
+    goal_type VARCHAR(50) NOT NULL, -- emergency_fund, vacation, home, etc.
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_user_goal_name UNIQUE (user_id, name)
+);
+
+-- Goal Contributions table
+CREATE TABLE goal_contributions (
+    contribution_id SERIAL PRIMARY KEY,
+    goal_id INTEGER NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
+    transaction_id INTEGER REFERENCES transactions(transaction_id),
+    amount DECIMAL(19, 4) NOT NULL,
+    contribution_date DATE NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Investment Assets table
+CREATE TABLE investment_assets (
+    asset_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    symbol VARCHAR(20),
+    name VARCHAR(255) NOT NULL,
+    asset_type VARCHAR(50) NOT NULL, -- stock, bond, mutual_fund, etc.
+    quantity DECIMAL(19, 8) NOT NULL,
+    cost_basis DECIMAL(19, 4),
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_account_symbol UNIQUE (account_id, symbol)
+);
+
+-- Asset Prices table (historical)
+CREATE TABLE asset_prices (
+    price_id SERIAL PRIMARY KEY,
+    asset_id INTEGER NOT NULL REFERENCES investment_assets(asset_id) ON DELETE CASCADE,
+    price_date TIMESTAMP NOT NULL,
+    price DECIMAL(19, 8) NOT NULL,
+    currency_code CHAR(3) NOT NULL DEFAULT 'USD',
+    source VARCHAR(50),
+    CONSTRAINT uk_asset_price_date UNIQUE (asset_id, price_date)
+);
+
+-- Notifications table
+CREATE TABLE notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    notification_type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    link_url VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notification Settings table
+CREATE TABLE notification_settings (
+    setting_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    notification_type VARCHAR(50) NOT NULL,
+    email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    sms_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    push_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT uk_user_notification_type UNIQUE (user_id, notification_type)
+);
+
+-- AI Insights table
+CREATE TABLE ai_insights (
+    insight_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    insight_type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    is_dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP
+);
+
+-- Report Templates table
+CREATE TABLE report_templates (
+    template_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    is_system BOOLEAN NOT NULL DEFAULT TRUE,
+    template_config JSONB NOT NULL
+);
+
+-- User Reports table
+CREATE TABLE user_reports (
+    report_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    template_id INTEGER REFERENCES report_templates(template_id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    report_config JSONB NOT NULL,
+    is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Audit Log table
+CREATE TABLE audit_logs (
+    log_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    action_type VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INTEGER,
+    old_value JSONB,
+    new_value JSONB,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API Integration table
+CREATE TABLE api_integrations (
+    integration_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at TIMESTAMP,
+    item_id VARCHAR(100),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    last_sync TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_user_provider UNIQUE (user_id, provider)
+);
+
+-- Create indexes for common queries
+CREATE INDEX idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX idx_transaction_categories_transaction_id ON transaction_categories(transaction_id);
+CREATE INDEX idx_transaction_categories_category_id ON transaction_categories(category_id);
+CREATE INDEX idx_account_balances_account_id_date ON account_balances(account_id, balance_date);
+CREATE INDEX idx_bills_user_id ON bills(user_id);
+CREATE INDEX idx_bill_payments_due_date ON bill_payments(due_date);
+CREATE INDEX idx_goals_user_id ON goals(user_id);
+CREATE INDEX idx_budget_categories_budget_id ON budget_categories(budget_id);
+CREATE INDEX idx_budget_categories_category_id ON budget_categories(category_id);
+CREATE INDEX idx_notifications_user_id_read ON notifications(user_id, is_read);
+CREATE INDEX idx_ai_insights_user_id_dismissed ON ai_insights(user_id, is_dismissed);

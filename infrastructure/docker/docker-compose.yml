@@ -1,0 +1,41 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: finance_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  
+  backend-go:
+    build:
+      context: ./backend-go
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  backend-python:
+    build:
+      context: ./backend-python
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+
+  frontend-react:
+    build:
+      context: ./frontend-react
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend-go
+      - backend-python
+
+volumes:
+  postgres_data:
+    driver: local
