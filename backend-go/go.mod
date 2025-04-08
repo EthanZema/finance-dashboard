@@ -1,6 +1,6 @@
 module finance_backend
 
-go 1.24.2
+go 1.23
 
 require github.com/go-pg/pg v8.0.7+incompatible
 
