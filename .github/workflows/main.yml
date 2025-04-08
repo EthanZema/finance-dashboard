@@ -1,34 +1,34 @@
-name: CI/CD Pipeline
+#name: CI/CD Pipeline
 
-on:
-  push:
-    branches: [ main, EthanTest ]
-  pull_request:
-    branches: [ main, EthanTest ]
-
-#env:
-#  DOCKER_BUILDKIT: 1
-#  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21.x'
-          cache-dependency-path: '/backend-go/go.sum'
-      - name: Install dependencies
-        run: |
-          cd backend-go
-          go mod tidy
-      - name: Build
-        run: |
-          cd backend-go
-
+#on:
+#  push:
+#    branches: [ main, EthanTest ]
+#  pull_request:
+#    branches: [ main, EthanTest ]
+#
+##env:
+##  DOCKER_BUILDKIT: 1
+##  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+#
+#jobs:
+#  build:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v5
+#      - name: Set up Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version: '1.21.x'
+#          cache-dependency-path: '/backend-go/go.sum'
+#      - name: Install dependencies
+#        run: |
+#          cd backend-go
+#          go mod tidy
+#      - name: Build
+#        run: |
+#          cd backend-go
+#
   #test:
   #  name: Test
   #  runs-on: ubuntu-latest
