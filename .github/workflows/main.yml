@@ -94,24 +94,25 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/finance-dashboard-go:latest
 
-  deploy-staging:
-    name: Deploy to Staging
-    needs: build
-    if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Deploy to staging
-        run: echo "Deploying to staging environment"
-        # Add your staging deployment commands here
+  #deploy-staging:
+  #  name: Deploy to Staging
+  #  needs: build
+  #  if: github.ref == 'refs/heads/develop'
+  #  runs-on: ubuntu-latest
+  #  environment: staging
+  #  steps:
+  #    - name: Deploy to staging
+  #      run: echo "Deploying to staging environment"
+  #      # Add your staging deployment commands here
 
   deploy-production:
-    name: Deploy to Production
+    name: Deploy Go Backend to Production
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Deploy to production
-        run: echo "Deploying to production environment"
-        # Add your production deployment commands here
+      - name: Deploy Go backend to production
+        run: |
+          echo "Deploying Go backend to production environment"
+          # Add your Go backend production deployment commands here
