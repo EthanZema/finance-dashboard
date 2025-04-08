@@ -2,10 +2,10 @@ package services
 
 import (
 	"context"
-	"encoding/json"
+	//"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
+	//"net/http"
 	"os"
 
 	"github.com/plaid/plaid-go/plaid"

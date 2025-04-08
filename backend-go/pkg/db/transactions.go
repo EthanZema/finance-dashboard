@@ -2,13 +2,13 @@ package db
 
 import (
 	"github.com/go-pg/pg"
-	"time"
+	//"time"
 )
 
 type Transaction struct {
 	
-    account_id 							int				`json:"id"` // filler for now but this is how to do it for json...still need to figure out exporting
-    plaid_transaction_id    string		`json:"trans_id"`
+    Account_Id 							int				`json:"id"` // filler for now but this is how to do it for json...still need to figure out exporting
+    Plaid_Transaction_Id    string		`json:"trans_id"`
     //transaction_date DATE
     //post_date DATE
     //merchant_name VARCHAR(255)
