@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 func main() {
 	engine := gin.Default()
+	engine.SetTrustedProxies(nil)
 	engine.GET("/", func(c *gin.Context){
 		c.JSON(http.StatusOK, gin.H{"message": "Hello, World!"})
 	})
