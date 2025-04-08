@@ -2,8 +2,6 @@ module finance_backend
 
 go 1.24.2
 
-toolchain go1.24.2
-
 require (
 	github.com/gin-gonic/gin v1.3.0
 	github.com/go-pg/pg v8.0.7+incompatible
